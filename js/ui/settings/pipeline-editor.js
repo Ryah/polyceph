@@ -3,6 +3,89 @@ import { autoResizeTextarea, generateId } from '../../utils.js';
 import { logger } from '../../logger.js';
 import { SELECTORS, getEl } from '../ui-shared.js';
 
+function moveStep(steps, fromIndex, toIndex) {
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= steps.length || toIndex >= steps.length) {
+        return false;
+    }
+
+    const [movedStep] = steps.splice(fromIndex, 1);
+    steps.splice(toIndex, 0, movedStep);
+    return true;
+}
+
+function bindStepDragAndDrop(stepsContainer, activePipeline) {
+    if (!stepsContainer) return;
+
+    let draggingStepId = null;
+
+    const clearDragState = () => {
+        stepsContainer.querySelectorAll('.polyceph-step-card').forEach(card => {
+            card.classList.remove('polyceph-step-dragging', 'polyceph-step-drop-target');
+        });
+    };
+
+    stepsContainer.querySelectorAll('.polyceph-step-card').forEach(card => {
+        const handle = card.querySelector('.polyceph-step-drag-handle');
+        if (!handle) return;
+
+        handle.setAttribute('draggable', 'true');
+
+        handle.addEventListener('dragstart', (event) => {
+            draggingStepId = card.getAttribute('data-step-id');
+            card.classList.add('polyceph-step-dragging');
+            if (event.dataTransfer) {
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', draggingStepId || '');
+            }
+        });
+
+        card.addEventListener('dragover', (event) => {
+            if (!draggingStepId || draggingStepId === card.getAttribute('data-step-id')) return;
+            event.preventDefault();
+            if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+
+            stepsContainer.querySelectorAll('.polyceph-step-drop-target').forEach(target => {
+                if (target !== card) target.classList.remove('polyceph-step-drop-target');
+            });
+            card.classList.add('polyceph-step-drop-target');
+        });
+
+        card.addEventListener('dragleave', (event) => {
+            if (!card.contains(event.relatedTarget)) {
+                card.classList.remove('polyceph-step-drop-target');
+            }
+        });
+
+        card.addEventListener('drop', (event) => {
+            event.preventDefault();
+            const targetStepId = card.getAttribute('data-step-id');
+            const sourceStepId = draggingStepId || event.dataTransfer?.getData('text/plain');
+
+            clearDragState();
+
+            if (!sourceStepId || !targetStepId || sourceStepId === targetStepId) {
+                draggingStepId = null;
+                return;
+            }
+
+            const fromIndex = activePipeline.steps.findIndex(step => step.id === sourceStepId);
+            const toIndex = activePipeline.steps.findIndex(step => step.id === targetStepId);
+
+            if (moveStep(activePipeline.steps, fromIndex, toIndex)) {
+                saveSettings();
+                updatePipelineEditorUI();
+            }
+
+            draggingStepId = null;
+        });
+
+        handle.addEventListener('dragend', () => {
+            clearDragState();
+            draggingStepId = null;
+        });
+    });
+}
+
 /**
  * Generates HTML for the preset dropdown based on the selected profile's API.
  */
@@ -18,7 +101,7 @@ function getPresetOptionsHTML(profileId, currentPreset) {
     }
 
     const presets = availablePresetsByApi[apiId] || [];
-    
+
     return `<option value="Current" ${(!currentPreset || currentPreset === 'Current') ? 'selected' : ''}>Current Preset</option>` +
         presets.map(p => `<option value="${p}" ${p === currentPreset ? 'selected' : ''}>${p}</option>`).join('');
 }
@@ -73,6 +156,9 @@ export function renderStep(step, index) {
         <div class="polyceph-step-card" data-step-id="${step.id}">
             <div class="polyceph-step-header" style="display: flex; flex-direction: column; gap: 10px;">
                 <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="polyceph-step-drag-handle" title="Drag to reorder step" aria-label="Drag to reorder step">
+                        <i class="fa-solid fa-grip-vertical"></i>
+                    </span>
                     <b>Step ${index + 1} </b>
                     <input type="text" class="polyceph-step-label-input text_pole" data-step-id="${step.id}" placeholder="Custom Label..." value="${step.label || ''}" style="flex: 1; max-width: 200px; padding: 2px 5px;" />
                     <i class="fa-solid fa-trash polyceph-del-step" data-step-id="${step.id}" style="margin-left: auto;"></i>
@@ -96,6 +182,7 @@ export function updatePipelineEditorUI() {
     const stepsContainer = getEl(SELECTORS.STEPS_CONTAINER);
     if (stepsContainer) {
         stepsContainer.innerHTML = activePipeline.steps.map((s, i) => renderStep(s, i)).join('');
+        bindStepDragAndDrop(stepsContainer, activePipeline);
 
         // Auto-resize all textareas after render
         setTimeout(() => {
@@ -206,7 +293,15 @@ export function bindStepEvents() {
             const stepId = e.currentTarget.getAttribute('data-step');
             const step = activePipeline.steps.find(s => s.id === stepId);
             if (step) {
-                step.tasks.push({ id: 'task_' + generateId(), profile: '', preset: 'Current', template: '{{user_input}}' });
+                step.tasks.push({
+                    id: 'task_' + generateId(),
+                    label: '',
+                    profile: 'none',
+                    preset: 'Current',
+                    template: '{{user_input}}',
+                    persist: false,
+                    isCharacter: false,
+                });
                 saveSettings();
                 updatePipelineEditorUI();
             }

@@ -17,6 +17,19 @@
     gap: 10px;
 }
 
+.polyceph-step-card[draggable="true"] {
+    cursor: grab;
+}
+
+.polyceph-step-card.polyceph-step-dragging {
+    opacity: 0.45;
+}
+
+.polyceph-step-card.polyceph-step-drop-target {
+    border-color: var(--SmartThemeQuoteColor, #66a3ff);
+    box-shadow: 0 0 0 1px var(--SmartThemeQuoteColor, #66a3ff);
+}
+
 .polyceph-step-header {
     display: flex;
     justify-content: space-between;
@@ -24,6 +37,21 @@
     font-weight: bold;
     border-bottom: 1px solid var(--black30a);
     padding-bottom: 5px;
+}
+
+.polyceph-step-drag-handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    color: var(--greyLight);
+    cursor: grab;
+    flex-shrink: 0;
+}
+
+.polyceph-step-card.polyceph-step-dragging .polyceph-step-drag-handle,
+.polyceph-step-drag-handle:active {
+    cursor: grabbing;
 }
 
 .polyceph-nodes-list {

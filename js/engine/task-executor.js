@@ -69,7 +69,17 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
     logger.debug(`Task Start: "${node.label || node.id}" (Profile: ${profileDisplayName}, API: ${taskApi})`);
 
     try {
-        // 4. Prompt Expansion
+        logger.debug('Task-executor starting, contextVault keys BEFORE DeepLore:', Object.keys(contextVault));
+
+        // 4. Inject pre-fetched DeepLore lore if available
+        if (window.polycephDeeploreLore && window.polycephDeeploreLore.length > 0) {
+            contextVault['deeplore_lore'] = window.polycephDeeploreLore;
+            logger.debug('[DLE-Polyceph] ✓ DeepLore injected into contextVault, length:', window.polycephDeeploreLore.length);
+        } else {
+            logger.warn('[DLE-Polyceph] No pre-fetched DeepLore available');
+        }
+
+        // 5. Prompt Expansion
         const prompt = await expandPrompt(node.template || '', settings, contextVault, cleanChat, stContext);
 
         if (signal.aborted) return null;
@@ -78,7 +88,7 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
         let parsedResult = null;
         const maxAttempts = (settings.maxRetries !== undefined) ? settings.maxRetries : 0;
 
-        // 5. Generation Loop (Retries)
+        // 6. Generation Loop (Retries)
         for (let attempt = 0; attempt <= maxAttempts; attempt++) {
             if (signal.aborted) return null;
 

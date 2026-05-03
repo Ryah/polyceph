@@ -10,14 +10,14 @@ import { handleBackgroundOutput, handleCharacterOutput, persistReasoningMessage 
  */
 export async function executePipelineSteps(userInput, generateSwipesForBatchId, signal) {
     // 1. Initialize Context
-    const { 
-        stContext, 
-        activePipeline, 
-        pipelineName, 
-        contextVault, 
-        batchId, 
-        cleanChat, 
-        batchData 
+    const {
+        stContext,
+        activePipeline,
+        pipelineName,
+        contextVault,
+        batchId,
+        cleanChat,
+        batchData
     } = await initializePipelineContext(userInput, generateSwipesForBatchId);
 
     let accumulatedThoughts = [];
@@ -72,10 +72,10 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                 }
 
                 const { parsedResult, taskApi, taskModel, profileDisplayName } = taskResult;
-                
+
                 if (parsedResult) {
                     const { cleanOutput, persistentOutput, thoughts, hiddenBackgrounds } = parsedResult;
-                    
+
                     // Store in vault
                     contextVault[`${step.id}_task_${taskResult.taskIdIndx}`] = cleanOutput;
                     contextVault[`${step.id}_target_${taskResult.taskIdIndx}`] = cleanOutput; // Legacy support

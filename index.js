@@ -31,12 +31,12 @@ export async function handlePolycephSend(e) {
  */
 export async function interceptSend(e) {
     if (settings.activePipelineId === 'none') return;
-    
+
     // Check Enter key behavior settings
     if (e.type === 'keydown') {
         const behavior = settings.enterBehavior || 'all';
         if (behavior === 'none') return;
-        
+
         const isMobile = window.matchMedia("(pointer: coarse)").matches;
         if (behavior === 'pc' && isMobile) return;
         if (behavior === 'mobile' && !isMobile) return;
@@ -255,7 +255,7 @@ async function init() {
             updateSendButtonVisibility();
         });
         context.eventSource.on('polyceph-settings-changed', updateSendButtonVisibility);
-        
+
         context.eventSource.on('polyceph-pipeline-started', () => {
             document.body.classList.add('polyceph-pipeline-active');
             updateSendButtonVisibility();

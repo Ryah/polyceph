@@ -33,11 +33,9 @@ export const defaultSettings = {
                             label: '',
                             profile: 'none',
                             preset: 'Current',
-                            useSystem: false,
                             template: '{{user_input}}',
                             persist: false,
-                            isCharacter: false,
-                            stripThink: true
+                            isCharacter: false
                         }
                     ]
                 }

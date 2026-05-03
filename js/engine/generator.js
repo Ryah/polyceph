@@ -61,7 +61,10 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
             let tool_choice = null;
 
             if (ToolManager && typeof ToolManager.isToolCallingSupported === 'function' && ToolManager.isToolCallingSupported()) {
-                tools = ToolManager.getFunctionTools();
+                logger.debug('[Polyceph-Debug] ToolManager methods available:', Object.keys(ToolManager));
+
+                // ToolManager.tools should contain the registered tools
+                tools = ToolManager.tools || [];
                 tool_choice = (tools && tools.length > 0) ? 'auto' : null;
 
                 if (tools && tools.length > 0 && context.eventSource && context.eventTypes?.CHAT_COMPLETION_SETTINGS_READY) {
@@ -70,7 +73,6 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                         messages: messages,
                         tools: tools,
                         tool_choice: tool_choice,
-                        // Passing additional settings to satisfy potential listeners (e.g. loggers/converters)
                         temperature: context.chatCompletionSettings?.temp_openai,
                         max_tokens: context.chatCompletionSettings?.openai_max_tokens || context.chatCompletionSettings?.max_tokens_openai,
                     };

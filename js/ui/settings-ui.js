@@ -14,6 +14,57 @@ export function updateUI() {
     updatePipelineEditorUI();
 }
 
+function normalizeTaskForIO(task, forceNewIds = false) {
+    return {
+        id: forceNewIds ? 'task_' + generateId() : (task?.id || ('task_' + generateId())),
+        label: task?.label || '',
+        profile: task?.profile || 'none',
+        preset: task?.preset || 'Current',
+        template: task?.template || '{{user_input}}',
+        persist: task?.persist === true,
+        isCharacter: task?.isCharacter === true,
+    };
+}
+
+function normalizeStepForIO(step, forceNewIds = false) {
+    const sourceTasks = Array.isArray(step?.tasks) ? step.tasks : [];
+    return {
+        id: forceNewIds ? 'step_' + generateId() : (step?.id || ('step_' + generateId())),
+        label: step?.label || '',
+        tasks: sourceTasks.map(task => normalizeTaskForIO(task, forceNewIds)),
+    };
+}
+
+function normalizePipelineForIO(pipeline, forceNewIds = false) {
+    const sourceSteps = Array.isArray(pipeline?.steps) ? pipeline.steps : [];
+    return {
+        id: forceNewIds ? 'pipeline_' + generateId() : (pipeline?.id || ('pipeline_' + generateId())),
+        name: pipeline?.name || 'Imported Pipeline',
+        steps: sourceSteps.map(step => normalizeStepForIO(step, forceNewIds)),
+    };
+}
+
+function serializePipelineForExport(pipeline) {
+    const normalizedPipeline = normalizePipelineForIO(pipeline, false);
+    return {
+        id: normalizedPipeline.id,
+        name: normalizedPipeline.name,
+        steps: normalizedPipeline.steps.map(step => ({
+            id: step.id,
+            label: step.label,
+            tasks: step.tasks.map(task => ({
+                id: task.id,
+                label: task.label,
+                profile: task.profile,
+                preset: task.preset,
+                template: task.template,
+                persist: task.persist,
+                isCharacter: task.isCharacter,
+            })),
+        })),
+    };
+}
+
 /**
  * Generates the main settings HTML structure.
  */
@@ -29,7 +80,7 @@ export function createSettingsHTML() {
                     <div class="polyceph-header">
                         Reasoning pipeline options:
                     </div>
-                    
+
                     <div class="polyceph-settings-section">
                         <div class="polyceph-settings-section-header" id="polyceph_ui_settings_toggle">
                             <span>UI Settings</span>
@@ -106,7 +157,7 @@ export function createSettingsHTML() {
                         <label for="polyceph_prompt_input" style="font-weight: bold; display: block; margin-bottom: 5px;">Polyceph Prompt</label>
                         <textarea id="polyceph_prompt_input" class="text_pole" style="width: 100%; min-height: 80px; font-family: monospace;" placeholder="Global context or instructions...">${settings.polycephPrompt || ''}</textarea>
                     </div>
-                    
+
                     <div style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px;">
                         ${renderNeoSlider('Request Delay (ms)', 'polyceph_delay', settings.delayMs || 0, 0, 5000, 50)}
                         ${renderNeoSlider('Model Timeout (ms)', 'polyceph_generation_timeout', settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 60000, 0, 300000, 1000)}
@@ -156,7 +207,7 @@ export function createSettingsHTML() {
                             <div style="margin-top: 10px; border-top: 1px solid var(--white10a); padding-top: 10px;">
                                 <b style="font-size: 1em; opacity: 0.8;">Post-Processing Tags (in Model Output)</b>
                                 <ul style="margin: 5px 0 0 0; padding-left: 20px; font-size: 0.9em; opacity: 0.9;">
-                                    <li><code>&lt;think&gt;...&lt;/think&gt;</code> - Stripped if "Strip Thinking" is enabled on the task.</li>
+                                    <li><code>&lt;think&gt;...&lt;/think&gt;</code> - Stripped and shown in reasoning traces.</li>
                                     <li><code>&lt;ramble&gt;...&lt;/ramble&gt;</code> - Renders as a reasoning card.</li>
                                     <li><code>&lt;background&gt;...&lt;/background&gt;</code> - Renders as a hidden background message.</li>
                                 </ul>
@@ -175,6 +226,16 @@ export function createSettingsHTML() {
                             <div style="display: flex; align-items: center; gap: 10px;">
                                 <b style="min-width: 120px;">Pipeline Name</b>
                                 <input type="text" id="polyceph_active_pipeline_name" class="text_pole" style="flex: 1; padding: 2px 5px;" placeholder="Pipeline Name..." />
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <b style="min-width: 120px;">Import / Export</b>
+                                <button id="polyceph_export_pipeline_btn" class="menu_button" style="flex: 1;" title="Export active pipeline as JSON">
+                                    <i class="fa-solid fa-file-export"></i> Export Pipeline
+                                </button>
+                                <button id="polyceph_import_pipeline_btn" class="menu_button" style="flex: 1;" title="Import pipeline(s) from a JSON file">
+                                    <i class="fa-solid fa-file-import"></i> Import Pipeline
+                                </button>
+                                <input type="file" id="polyceph_import_pipeline_file" accept=".json" style="display: none;" />
                             </div>
                         </div>
                     </div>
@@ -344,7 +405,16 @@ export function addSettingsUI() {
         const pipeline = getActivePipeline();
         pipeline.steps.push({
             id: 'step_' + generateId(),
-            tasks: [{ id: 'task_' + generateId(), profile: '', preset: 'Current', template: '{{user_input}}' }]
+            label: '',
+            tasks: [{
+                id: 'task_' + generateId(),
+                label: '',
+                profile: 'none',
+                preset: 'Current',
+                template: '{{user_input}}',
+                persist: false,
+                isCharacter: false,
+            }]
         });
         saveSettings();
         updateUI();
@@ -360,5 +430,63 @@ export function addSettingsUI() {
         const totalPresets = Object.values(availablePresetsByApi).flat().length;
         toastr.success(`Found ${availableProfiles.length} profiles, ${totalPresets} presets.`, 'Polyceph');
         updateUI();
+    });
+
+    // Export active pipeline as JSON
+    getEl('polyceph_export_pipeline_btn')?.addEventListener('click', () => {
+        const pipeline = getActivePipeline();
+        if (!pipeline) {
+            toastr.warning('No active pipeline to export.', 'Polyceph');
+            return;
+        }
+        const json = JSON.stringify(serializePipelineForExport(pipeline), null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `polyceph-pipeline-${pipeline.name.replace(/[^a-z0-9_\-]/gi, '_')}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+
+    // Import pipeline(s) from JSON
+    getEl('polyceph_import_pipeline_btn')?.addEventListener('click', () => {
+        getEl('polyceph_import_pipeline_file')?.click();
+    });
+
+    getEl('polyceph_import_pipeline_file')?.addEventListener('change', (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            try {
+                const parsed = JSON.parse(evt.target.result);
+                const pipelines = Array.isArray(parsed) ? parsed : [parsed];
+                let imported = 0;
+                for (const p of pipelines) {
+                    if (!p || typeof p !== 'object' || !Array.isArray(p.steps)) {
+                        toastr.warning(`Skipped invalid pipeline entry.`, 'Polyceph');
+                        continue;
+                    }
+                    // Assign fresh IDs and normalize schema for consistency
+                    const newPipeline = normalizePipelineForIO(p, true);
+                    settings.pipelines.push(newPipeline);
+                    settings.activePipelineId = newPipeline.id;
+                    imported++;
+                }
+                if (imported > 0) {
+                    saveSettings();
+                    updateUI();
+                    toastr.success(`Imported ${imported} pipeline(s).`, 'Polyceph');
+                }
+            } catch (err) {
+                toastr.error('Failed to parse JSON file.', 'Polyceph');
+            }
+        };
+        reader.readAsText(file);
+        // Reset so the same file can be re-imported
+        e.target.value = '';
     });
 }

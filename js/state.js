@@ -310,8 +310,9 @@ export function loadSettings() {
                 s.tasks.forEach(n => {
                     if (n.persist === undefined) n.persist = false;
                     if (n.isCharacter === undefined) n.isCharacter = false;
-                    if (n.stripThink === undefined) n.stripThink = false;
                     if (n.preset === undefined) n.preset = 'Current';
+                    delete n.useSystem;
+                    delete n.stripThink;
                 });
             });
         });

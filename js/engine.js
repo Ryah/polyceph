@@ -24,6 +24,38 @@ export { executePipelineSteps, generateQuietly };
 let currentPipelineAbortController = null;
 let currentMutexHolder = null;
 
+function clearWaitingTaskIndicator() {
+    const stContext = SillyTavern.getContext();
+    if (!stContext?.chat) return;
+
+    let touched = false;
+    stContext.chat.forEach((msg, idx) => {
+        const tasks = msg?.extra?.polyceph_active_tasks;
+        if (!Array.isArray(tasks) || tasks.length === 0) return;
+        const nextTasks = tasks.filter(t => t?.id !== 'waiting');
+        if (nextTasks.length !== tasks.length) {
+            msg.extra.polyceph_active_tasks = nextTasks;
+            touched = true;
+            if (typeof stContext.updateMessageBlock === 'function') {
+                stContext.updateMessageBlock(idx, msg);
+            }
+        }
+    });
+
+    if (touched) {
+        updateTypingIndicator();
+    }
+}
+
+function publishDeepLoreTraceToSidebar() {
+    const traceData = window.polycephDeeploreLoreTrace;
+    if (!traceData) return;
+    if (typeof globalThis.deepLoreEnhanced_polycephPublish === 'function') {
+        const publishedCount = globalThis.deepLoreEnhanced_polycephPublish(traceData);
+        logger.info('[DLE-Polyceph] Published DeepLore trace to sidebar state:', publishedCount, 'entries');
+    }
+}
+
 // Listen for mutex events globally to track state
 function initMutexTracker() {
     const context = SillyTavern.getContext();
@@ -143,8 +175,38 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
 
             await stContext.eventSource.emit(stContext.eventTypes.GENERATION_AFTER_COMMANDS, 'normal', emulateOptions, false);
 
-            // Ensure all extension metadata (like Tracker-Enhanced temp trackers) is synced to the server 
+            // Ensure all extension metadata (like Tracker-Enhanced temp trackers) is synced to the server
             await ensureChatSaved();
+
+            // Pre-fetch DeepLore entries during the extension waiting phase
+            let polycephDeeploreLore = '';
+            if (typeof globalThis.deepLoreEnhanced_polycephRetrieve === 'function') {
+                try {
+                    logger.debug('[DLE-Polyceph] Pre-fetching DeepLore entries...');
+                    const result = await globalThis.deepLoreEnhanced_polycephRetrieve();
+                    polycephDeeploreLore = result;
+                    logger.info('[DLE-Polyceph] DeepLore retrieval returned:', polycephDeeploreLore?.length || 0, 'characters');
+
+                    // Store in window so task-executor can access it
+                    window.polycephDeeploreLore = polycephDeeploreLore;
+
+                    // Also store the trace/entries for sidebar population
+                    if (typeof globalThis.deepLoreEnhanced_lastPolycephTrace !== 'undefined') {
+                        window.polycephDeeploreLoreTrace = globalThis.deepLoreEnhanced_lastPolycephTrace;
+                        logger.info('[DLE-Polyceph] Stored trace with', globalThis.deepLoreEnhanced_lastPolycephTrace.entries?.length || 0, 'entries');
+
+                        // Log the injected entries to console
+                        if (globalThis.deepLoreEnhanced_lastPolycephTrace.entries && globalThis.deepLoreEnhanced_lastPolycephTrace.entries.length > 0) {
+                            console.log('[DLE-Polyceph] Injected Entries:');
+                            globalThis.deepLoreEnhanced_lastPolycephTrace.entries.forEach((entry, idx) => {
+                                console.log(`  ${idx + 1}. ${entry.title} (${entry.tokenEstimate} tokens, priority: ${entry.priority})`);
+                            });
+                        }
+                    }
+                } catch (err) {
+                    logger.warn('[DLE-Polyceph] DeepLore pre-fetch failed:', err);
+                }
+            }
 
             // Recapture mutex AFTER core events for the actual pipeline execution.
             await stContext.eventSource.emit(generationMutexEvents.MUTEX_CAPTURED, { extension_name: MODULE_NAME });
@@ -169,19 +231,52 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
             currentPipelineAbortController.abort();
         }
     } finally {
+        // Always clear transitional "waiting" status, even if later teardown throws.
+        try {
+            clearWaitingTaskIndicator();
+        } catch (err) {
+            logger.warn('[Polyceph] Failed clearing waiting indicator:', err);
+        }
+
         // 1. Immediate UI Cleanup
-        await removeTypingIndicator();
-        forceHideStopButton();
-        
+        try {
+            await removeTypingIndicator();
+        } catch (err) {
+            logger.warn('[Polyceph] removeTypingIndicator failed:', err);
+        }
+
+        try {
+            forceHideStopButton();
+        } catch (err) {
+            logger.warn('[Polyceph] forceHideStopButton failed:', err);
+        }
+
         // Give UI a moment to settle
-        await new Promise(r => setTimeout(r, 100));
+        try {
+            await new Promise(r => setTimeout(r, 100));
+        } catch { /* no-op */ }
 
         // 2. Restore the user's original session state
-        await restoreSessionState();
-        
+        try {
+            await restoreSessionState();
+        } catch (err) {
+            logger.warn('[Polyceph] restoreSessionState failed:', err);
+        }
+
         currentPipelineAbortController = null;
 
         // 3. Final Event Emulation & Mutex Release
-        await finalizePipelineTeardown();
+        try {
+            await finalizePipelineTeardown();
+        } catch (err) {
+            logger.warn('[Polyceph] finalizePipelineTeardown failed:', err);
+        }
+
+        // 4. Populate DeepLore sidebar with injected entries
+        try {
+            publishDeepLoreTraceToSidebar();
+        } catch (err) {
+            logger.warn('[DLE-Polyceph] Failed to populate sidebar:', err);
+        }
     }
 }
