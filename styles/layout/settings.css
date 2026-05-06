@@ -1,0 +1,52 @@
+/* Polyceph Extension Settings Layout */
+
+.polyceph-settings-section {
+    margin-bottom: 10px;
+    background: var(--black30a);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.polyceph-settings-section-header {
+    padding: 8px;
+    cursor: pointer;
+    font-size: 0.85em;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--black10a);
+    font-weight: bold;
+}
+
+.polyceph-settings-section-header:hover {
+    background: var(--black40a);
+}
+
+.polyceph-settings-section-content {
+    padding: 10px;
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.polyceph-settings-section-content.active {
+    display: flex;
+}
+
+.polyceph-locked {
+    opacity: 0.8;
+    position: relative;
+}
+
+.polyceph-locked label {
+    opacity: 0.6;
+    cursor: default !important;
+}
+
+.polyceph-locked input, 
+.polyceph-locked select, 
+.polyceph-locked textarea {
+    cursor: not-allowed;
+    background-color: var(--black30a) !important;
+}
+

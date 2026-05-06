@@ -1,11 +1,14 @@
 export const MODULE_NAME = 'polyceph';
-export const VERSION = '0.7.4';
+export const VERSION = '0.8.8';
+export const PIPELINE_DATA_VERSION = '1.0.0';
 
 export const defaultSettings = {
     delayMs: 250,
     generationTimeoutMs: 60000,
     maxRetries: 3,
     retryDelayMs: 2000,
+    enableStreaming: true,
+    loopDetectionThreshold: 3,
     toolRecursionLimit: 5,
     activePipelineId: 'default',
     interceptSend: true,
@@ -15,6 +18,7 @@ export const defaultSettings = {
     compactSelectorMode: false,
     showHiddenMessages: false,
     showReasoning: true,
+    stickyTypingIndicator: false,
     restore_after_run: true,
     emulateCoreEvents: true,
     logLevel: 2,
@@ -35,7 +39,8 @@ export const defaultSettings = {
                             preset: 'Current',
                             template: '{{user_input}}',
                             persist: false,
-                            isCharacter: false
+                            isCharacter: false,
+                            antiLoop: true
                         }
                     ]
                 }

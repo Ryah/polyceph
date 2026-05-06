@@ -1,6 +1,7 @@
 import { logger } from '../../logger.js';
 import { stopPipeline } from '../../engine.js';
-import { scrollToBottom } from '../ui-shared.js';
+import { scrollToBottom, scrollToBottomIfNear } from '../ui-shared.js';
+import { settings } from '../../state.js';
 
 let retryHandlerBound = false;
 
@@ -86,6 +87,7 @@ export function generateThoughtsHTML(thoughtsArray, pipelineName, mesId) {
             </div>
         </div>
     </div>`;
+    bindRetryFromStepHandler();
 }
 
 /**
@@ -111,10 +113,24 @@ export function renderPolycephTyping(messageElement, chatMsg) {
     const $mesBlock = $(messageElement).find('.mes_block');
     messageElement.setAttribute('polyceph_typing', 'true');
 
-    let $indicator = $mesBlock.find('.polyceph-typing-indicator');
+    const isSticky = settings.stickyTypingIndicator;
+    let $indicator;
+
+    if (isSticky) {
+        let $container = $('#polyceph-sticky-container');
+        if ($container.length === 0) $container = $('<div id="polyceph-sticky-container"></div>').appendTo('body');
+        $indicator = $container.find('.polyceph-typing-indicator');
+        // If it was inline, remove it
+        $mesBlock.find('.polyceph-typing-indicator').remove();
+    } else {
+        $indicator = $mesBlock.find('.polyceph-typing-indicator');
+        // If it was sticky, remove it
+        $('#polyceph-sticky-container .polyceph-typing-indicator').remove();
+    }
+
     if ($indicator.length === 0) {
         $indicator = $(`
-            <div class="polyceph-typing-indicator">
+            <div class="polyceph-typing-indicator ${isSticky ? 'polyceph-sticky' : ''}">
                 <div class="polyceph-typing-header">
                     <div class="polyceph-typing-title">
                         <span class="fa-solid fa-spinner fa-spin"></span>
@@ -131,8 +147,13 @@ export function renderPolycephTyping(messageElement, chatMsg) {
             e.stopPropagation();
             stopPipeline();
         });
-        $mesBlock.append($indicator);
-        scrollToBottom();
+
+        if (isSticky) {
+            $('#polyceph-sticky-container').append($indicator);
+        } else {
+            $mesBlock.append($indicator);
+            scrollToBottomIfNear();
+        }
     }
 
     if (isStopping) {
@@ -150,7 +171,10 @@ export function renderPolycephTyping(messageElement, chatMsg) {
         `).join('');
         $indicator.find('.polyceph-active-tasks-list').html(tasksHtml || '<div class="polyceph-active-task-label">Preparing...</div>');
         $indicator.find('.polyceph-stop-button').show();
-        scrollToBottom();
+
+        if (!isSticky) {
+            scrollToBottomIfNear();
+        }
     }
 }
 
@@ -163,6 +187,12 @@ export function renderPolycephThoughts() {
 
     bindRetryFromStepHandler();
 
+    // 0. Global Typing State Check
+    const anyTyping = context.chat.some(m => m && m.extra && m.extra.polyceph_typing);
+    if (!anyTyping && settings.stickyTypingIndicator) {
+        $('#polyceph-sticky-container .polyceph-typing-indicator').remove();
+    }
+
     $('#chat .mes').each((_, messageElement) => {
         const mesId = messageElement.getAttribute('mesid');
         const chatMsg = context.chat[mesId];
@@ -174,9 +204,11 @@ export function renderPolycephThoughts() {
             renderPolycephTyping(messageElement, chatMsg);
             return;
         } else {
+            // Only remove inline indicators here; sticky is handled globally
             $(messageElement).find('.polyceph-typing-indicator').remove();
             messageElement.removeAttribute('polyceph_typing');
         }
+
 
         // 2. Handle Hidden Background Messages
         if ((chatMsg.extra && chatMsg.extra.polyceph_hidden) || chatMsg.name === 'Background') {
@@ -253,5 +285,5 @@ export function renderPolycephThoughts() {
     });
 
     // Defer a final scroll to ensure all injected elements are sized
-    setTimeout(() => scrollToBottom(), 50);
+    setTimeout(() => scrollToBottomIfNear(), 50);
 }

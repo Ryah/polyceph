@@ -502,7 +502,7 @@ async function init() {
 
     // Initialize UI Subsystems
     initUI();
-    addSettingsUI();
+    await addSettingsUI();
     await registerPolycephSlashCommands();
     setupIntercepts();
     injectChatPipelineSelector(handlePolycephSend);
