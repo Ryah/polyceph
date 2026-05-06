@@ -136,7 +136,7 @@
 
 .polyceph-thought-summary-container::before {
     display: flex;
-    content: '▶';
+    content: 'â–¶';
     margin-right: 8px;
     transition: transform 0.2s;
 }
@@ -228,6 +228,38 @@
     letter-spacing: normal;
     margin-left: auto;
     padding-right: 10px;
+}
+
+.polyceph-item-controls {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.polyceph-rerun-step-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--SmartThemeBorderColor, #555);
+    border-radius: 5px;
+    background: var(--SmartThemeChatTintColor, rgba(0, 0, 0, 0.25));
+    color: var(--SmartThemeBodyColor);
+    cursor: pointer;
+    opacity: 0.8;
+    transition: opacity 0.15s, transform 0.15s;
+}
+
+.polyceph-rerun-step-button:hover {
+    opacity: 1;
+    transform: translateY(-1px);
+}
+
+.polyceph-rerun-step-button i {
+    font-size: 0.7rem;
+    pointer-events: none;
 }
 
 .polyceph-thought-summary-title {
@@ -913,4 +945,15 @@ body.polyceph-pipeline-active #mes_stop {
     border-color: var(--SmartThemeQuoteColor);
     color: var(--SmartThemeQuoteColor);
     box-shadow: 0 0 5px var(--SmartThemeQuoteColor);
+}
+
+/* Polyceph Continue Button (extraMesButtons) */
+.polyceph-continue-button {
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+
+.polyceph-continue-button:hover {
+    color: var(--SmartThemeQuoteColor, #aef);
 }

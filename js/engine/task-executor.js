@@ -102,6 +102,11 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
 
                 if (!isEmpty) {
                     parsedResult = parseOutputTags(rawRes, node.label || `Task ${taskIdIndx}`, profileDisplayName, node.persist && !node.isCharacter);
+                    parsedResult.thoughts = (parsedResult.thoughts || []).map(thought => ({
+                        ...thought,
+                        step: stepIdx,
+                        totalSteps: totalSteps,
+                    }));
                     break;
                 }
 

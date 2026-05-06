@@ -21,6 +21,83 @@ export { captureSessionState, restoreSessionState };
 export { finalizePipelineTeardown };
 export { executePipelineSteps, generateQuietly };
 
+function isPolycephBatchMessage(msg, batchId) {
+    return !!msg?.extra && msg.extra.polyceph_batch === batchId;
+}
+
+function shouldRollbackMessage(msg, fromStep) {
+    if (!msg?.extra || !msg.extra.polyceph_source) return false;
+
+    const stepMeta = Number(msg.extra.polyceph_step);
+    if (Number.isFinite(stepMeta)) {
+        return stepMeta >= fromStep;
+    }
+
+    // Legacy fallback for older batches without step metadata.
+    if (msg.name === 'Polyceph Reasoning') return true;
+    return !!msg.extra.polyceph_task_id || !!msg.extra.polyceph_hidden;
+}
+
+function applyBlankSwipe(msg) {
+    if (!Array.isArray(msg.swipes)) {
+        msg.swipes = [msg.mes || ''];
+        msg.swipe_info = [{ extra: { ...(msg.extra || {}) } }];
+        msg.swipe_id = 0;
+    }
+
+    const blankExtra = {
+        ...(msg.extra || {}),
+        polyceph_rolled_back: true,
+        polyceph_thoughts: []
+    };
+
+    msg.swipes.push('');
+    if (!Array.isArray(msg.swipe_info)) {
+        msg.swipe_info = [];
+    }
+    msg.swipe_info.push({ extra: { ...blankExtra } });
+    msg.swipe_id = msg.swipes.length - 1;
+    msg.mes = '';
+    msg.extra = blankExtra;
+}
+
+async function rollbackBatchFromStep(batchId, fromStep) {
+    const stContext = SillyTavern.getContext();
+    let changed = false;
+
+    for (let i = stContext.chat.length - 1; i >= 0; i--) {
+        const msg = stContext.chat[i];
+        if (!isPolycephBatchMessage(msg, batchId)) continue;
+        if (!shouldRollbackMessage(msg, fromStep)) continue;
+
+        // Do not delete messages: blank swipe to preserve batch linkage and chat structure.
+        applyBlankSwipe(msg);
+        changed = true;
+
+        if (typeof stContext.updateMessageBlock === 'function') {
+            stContext.updateMessageBlock(i, msg);
+        }
+    }
+
+    if (changed) {
+        if (typeof stContext.swipe?.refresh === 'function') {
+            stContext.swipe.refresh(true);
+        }
+        await ensureChatSaved();
+    }
+}
+
+function getBatchAnchorMessage(batchId) {
+    const stContext = SillyTavern.getContext();
+    return stContext.chat.find(m => m?.extra?.polyceph_batch === batchId && !!m.extra?.polyceph_input) || null;
+}
+
+function getBatchContextSnapshot(batchId) {
+    const stContext = SillyTavern.getContext();
+    const batchMsg = stContext.chat.find(m => m?.extra?.polyceph_batch === batchId && m?.extra?.polyceph_context);
+    return batchMsg?.extra?.polyceph_context || null;
+}
+
 let currentPipelineAbortController = null;
 let currentMutexHolder = null;
 
@@ -108,7 +185,7 @@ export async function startPipeline(text, generateSwipesForBatchId, triggeringUs
     }
 }
 
-export async function runPipeline(userInput, generateSwipesForBatchId, triggeringUserMesId = -1) {
+export async function runPipeline(userInput, generateSwipesForBatchId, triggeringUserMesId = -1, executionOptions = {}) {
     if (currentPipelineAbortController) currentPipelineAbortController.abort();
     currentPipelineAbortController = new AbortController();
     const signal = currentPipelineAbortController.signal;
@@ -218,7 +295,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
         captureSessionState();
 
         // 2. Execute pipeline steps
-        await executePipelineSteps(userInput, generateSwipesForBatchId, signal);
+        await executePipelineSteps(userInput, generateSwipesForBatchId, signal, executionOptions);
 
     } catch (e) {
         if (e.message === 'Aborted') {
@@ -279,4 +356,29 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
             logger.warn('[DLE-Polyceph] Failed to populate sidebar:', err);
         }
     }
+}
+
+/**
+ * Reruns an existing Polyceph batch from a specific step while preserving prior-step context.
+ */
+export async function rerunPipelineFromStep(batchId, fromStep, triggeringUserMesId = -1) {
+    const stepNum = Math.max(1, Number(fromStep) || 1);
+    const anchor = getBatchAnchorMessage(batchId);
+
+    if (!anchor?.extra?.polyceph_input) {
+        toastr.error('Could not find Polyceph batch input for rerun.', 'Polyceph');
+        return;
+    }
+
+    const userInput = anchor.extra.polyceph_input;
+    const initialContextVault = getBatchContextSnapshot(batchId);
+
+    if (stepNum > 1) {
+        await rollbackBatchFromStep(batchId, stepNum);
+    }
+
+    await runPipeline(userInput, batchId, triggeringUserMesId, {
+        startStep: stepNum,
+        initialContextVault
+    });
 }

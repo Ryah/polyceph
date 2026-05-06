@@ -4,7 +4,7 @@ import { postMessageToChat, getActiveCharacterInfo, ensureChatSaved } from '../c
 /**
  * Handles persistence of hidden background messages.
  */
-export async function handleBackgroundOutput(bg, bgIndex, batchData, api, model) {
+export async function handleBackgroundOutput(bg, bgIndex, batchData, api, model, stepIdx = null) {
     const stContext = SillyTavern.getContext();
     const { batchId, batchBgMessages, generateSwipesForBatchId } = batchData;
 
@@ -22,15 +22,16 @@ export async function handleBackgroundOutput(bg, bgIndex, batchData, api, model)
             targetBg.swipe_info = [{ extra: { ...(targetBg.extra || {}) } }];
             targetBg.swipe_id = 0;
         }
-        
+
         targetBg.swipes.push(bg);
         targetBg.swipe_id = targetBg.swipes.length - 1;
         targetBg.mes = bg;
-        
+
         const bgExtra = {
             polyceph_source: 'polyceph',
             polyceph_hidden: true,
             polyceph_batch: batchId,
+            polyceph_step: stepIdx,
             api: api,
             model: model
         };
@@ -48,7 +49,7 @@ export async function handleBackgroundOutput(bg, bgIndex, batchData, api, model)
         postMessageToChat({
             content: bg,
             name: 'Background',
-            extra: { polyceph_source: 'polyceph', polyceph_hidden: true, polyceph_batch: batchId },
+            extra: { polyceph_source: 'polyceph', polyceph_hidden: true, polyceph_batch: batchId, polyceph_step: stepIdx },
             save: true,
             api: api,
             model: model,
@@ -59,7 +60,7 @@ export async function handleBackgroundOutput(bg, bgIndex, batchData, api, model)
 /**
  * Handles persistence of character messages, including thoughts and swipes.
  */
-export async function handleCharacterOutput(content, thoughts, charIndex, node, batchData, api, model, userInput, pipelineName) {
+export async function handleCharacterOutput(content, thoughts, charIndex, node, batchData, api, model, userInput, pipelineName, stepIdx = null) {
     const stContext = SillyTavern.getContext();
     const { batchId, batchCharMessages, generateSwipesForBatchId } = batchData;
     const { name: charName, avatarUrl: avatarStr } = getActiveCharacterInfo();
@@ -69,6 +70,7 @@ export async function handleCharacterOutput(content, thoughts, charIndex, node, 
         polyceph_batch: batchId,
         polyceph_input: userInput,
         polyceph_task_id: node.id,
+        polyceph_step: stepIdx,
         polyceph_pipeline: pipelineName,
         api: api,
         model: model
@@ -134,7 +136,7 @@ export async function persistReasoningMessage(thoughts, batchData, userInput) {
         if (!batchReasoningMsg.extra) batchReasoningMsg.extra = {};
         batchReasoningMsg.extra.polyceph_thoughts = thoughts;
         batchReasoningMsg.swipe_info.push({ extra: { polyceph_thoughts: thoughts } });
-        
+
         if (rIdx !== -1 && typeof stContext.updateMessageBlock === 'function') {
             stContext.updateMessageBlock(rIdx, batchReasoningMsg);
             await ensureChatSaved();

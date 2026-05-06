@@ -86,3 +86,31 @@ export async function getTextGenModelsModule() {
 export async function getTextGenSettingsModule() {
     return await tryImportST('textgen-settings.js');
 }
+
+/**
+ * Imports SillyTavern's core script.js module (Generate, event_types, etc.)
+ */
+export async function getScriptModule() {
+    return await tryImportST('script.js');
+}
+
+/**
+ * Imports SillyTavern's slash command parser module.
+ */
+export async function getSlashCommandParserModule() {
+    return await tryImportST('slash-commands/SlashCommandParser.js');
+}
+
+/**
+ * Imports SillyTavern's SlashCommand class module.
+ */
+export async function getSlashCommandModule() {
+    return await tryImportST('slash-commands/SlashCommand.js');
+}
+
+/**
+ * Imports SillyTavern's SlashCommandArgument helpers and ARGUMENT_TYPE enum.
+ */
+export async function getSlashCommandArgumentModule() {
+    return await tryImportST('slash-commands/SlashCommandArgument.js');
+}

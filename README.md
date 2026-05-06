@@ -42,7 +42,7 @@ Standard AI interaction is linear: you send a prompt, and a single model respond
 ## Setup Guide
 
 ### Step 1: Configure Connection Profiles
-Polyceph leverages SillyTavern's built-in **Connection Profiles**. 
+Polyceph leverages SillyTavern's built-in **Connection Profiles**.
 1. Open the **API Connections** menu (plug icon).
 2. Configure a model and click **Save** in the Connection Profiles section.
 3. Repeat for each model you want to use in your pipelines.
@@ -106,7 +106,7 @@ Polyceph is designed to be a transparent layer on top of SillyTavern's existing 
 
 ### Native Tool Calling & Recursion
 
-Polyceph provides a robust, recursive environment for LLM tools. 
+Polyceph provides a robust, recursive environment for LLM tools.
 
 1. **Invocations Metadata**: Tool results are preserved in the chat history using custom `[[INVOCATIONS:json]]` tags. These tags ensure that structured tool data survives SillyTavern's prompt assembly process, allowing models to maintain a coherent "chain of thought" across multiple turns.
 2. **The Recursion Loop**: If an LLM response contains tool calls, Polyceph intercepts them, executes the corresponding SillyTavern tools, and feeds the results back into a new generation pass. This allows for complex behaviors like "Search -> Analyze -> Summarize" to happen within a single pipeline task.
@@ -149,4 +149,3 @@ When a pipeline task is executed, Polyceph performs the following steps:
 - **Restore Profile & Preset after Run**: Automatically returns SillyTavern to the connection profile and preset you were using before the pipeline started.
 - **Show Hidden Background Messages**: Toggles the visibility of `<background>` messages in the chat history (displays them with a special separator).
 - **Show Reasoning Blocks**: Toggles the display of collapsible reasoning blocks in chat messages.
-

@@ -1,6 +1,6 @@
 import { logger } from '../logger.js';
 import { settings, switchProfile } from '../state.js';
-import { initializePipelineContext } from './context.js';
+import { initializePipelineContextWithOptions } from './context.js';
 import { runTask } from './task-executor.js';
 import { handleBackgroundOutput, handleCharacterOutput, persistReasoningMessage } from './message-manager.js';
 
@@ -8,7 +8,9 @@ import { handleBackgroundOutput, handleCharacterOutput, persistReasoningMessage 
  * Executes the core pipeline logic, including step iteration, task grouping,
  * and parallel LLM execution.
  */
-export async function executePipelineSteps(userInput, generateSwipesForBatchId, signal) {
+export async function executePipelineSteps(userInput, generateSwipesForBatchId, signal, options = {}) {
+    const startStep = Number(options.startStep) > 0 ? Number(options.startStep) : 1;
+
     // 1. Initialize Context
     const {
         stContext,
@@ -18,13 +20,22 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
         batchId,
         cleanChat,
         batchData
-    } = await initializePipelineContext(userInput, generateSwipesForBatchId);
+    } = await initializePipelineContextWithOptions(userInput, generateSwipesForBatchId, options);
 
     let accumulatedThoughts = [];
     const totalSteps = activePipeline.steps.length;
+    if (totalSteps === 0) {
+        return;
+    }
+
+    const initialStepIndex = Math.min(Math.max(startStep, 1), totalSteps);
+
+    if (initialStepIndex > 1) {
+        logger.info(`Resuming pipeline batch from step ${initialStepIndex}/${totalSteps}.`);
+    }
 
     // 2. Iterate Steps
-    for (let i = 0; i < totalSteps; i++) {
+    for (let i = initialStepIndex - 1; i < totalSteps; i++) {
         const step = activePipeline.steps[i];
         const stepIdx = i + 1;
 
@@ -96,7 +107,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                     // 4. Handle Backgrounds
                     for (const bg of hiddenBackgrounds) {
                         if (signal.aborted) return;
-                        await handleBackgroundOutput(bg, bgMsgOutputCount++, batchData, taskApi, taskModel);
+                        await handleBackgroundOutput(bg, bgMsgOutputCount++, batchData, taskApi, taskModel, stepIdx);
                     }
 
                     // 5. Handle Character Persistence
@@ -105,7 +116,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                         if (node.isCharacter) {
                             const taskThoughts = accumulatedThoughts;
                             accumulatedThoughts = [];
-                            await handleCharacterOutput(content, taskThoughts, charMsgOutputCount++, node, batchData, taskApi, taskModel, userInput, pipelineName);
+                            await handleCharacterOutput(content, taskThoughts, charMsgOutputCount++, node, batchData, taskApi, taskModel, userInput, pipelineName, stepIdx);
                         }
                     }
                 }
@@ -122,5 +133,21 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
     // 6. Final Thoughts Persistence
     if (accumulatedThoughts.length > 0 && !signal.aborted) {
         await persistReasoningMessage(accumulatedThoughts, batchData, userInput);
+    }
+
+    // Persist context snapshot for rerun-from-step recovery.
+    if (!signal.aborted) {
+        const contextSnapshot = {};
+        for (const [key, value] of Object.entries(contextVault)) {
+            if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+                contextSnapshot[key] = value;
+            }
+        }
+
+        const batchMessages = stContext.chat.filter(m => m?.extra?.polyceph_batch === batchId);
+        for (const msg of batchMessages) {
+            if (!msg.extra) msg.extra = {};
+            msg.extra.polyceph_context = contextSnapshot;
+        }
     }
 }

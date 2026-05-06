@@ -18,7 +18,7 @@ export async function initializePipelineContext(userInput, generateSwipesForBatc
         'input': userInput
     };
     const batchId = generateSwipesForBatchId || 'batch_' + generateId();
-    
+
     // Filter out typing indicator from chat for macro resolution to avoid '...' in history
     const cleanChat = stContext.chat.filter(m => m && !m.extra?.polyceph_typing && !m.is_system && !m.mes?.trim().startsWith('/'));
 
@@ -29,7 +29,7 @@ export async function initializePipelineContext(userInput, generateSwipesForBatc
     let batchCharMessages = [];
     let batchBgMessages = [];
     let batchReasoningMsg = null;
-    
+
     if (generateSwipesForBatchId) {
         const batchMsgs = stContext.chat.filter(m => m.extra?.polyceph_batch === generateSwipesForBatchId);
         batchBgMessages = batchMsgs.filter(m => m.extra?.polyceph_hidden);
@@ -65,4 +65,27 @@ export async function initializePipelineContext(userInput, generateSwipesForBatc
             generateSwipesForBatchId
         }
     };
+}
+
+/**
+ * Initializes the execution context for a pipeline run with optional seeded context.
+ * @returns {Promise<Object>} The initialized context data.
+ */
+export async function initializePipelineContextWithOptions(userInput, generateSwipesForBatchId, options = {}) {
+    const initial = await initializePipelineContext(userInput, generateSwipesForBatchId);
+
+    const seededContext = options?.initialContextVault;
+    if (seededContext && typeof seededContext === 'object') {
+        // Keep only plain primitive values from persisted snapshots.
+        for (const [key, value] of Object.entries(seededContext)) {
+            if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+                initial.contextVault[key] = value;
+            }
+        }
+        // User input always reflects the current rerun input.
+        initial.contextVault.user_input = userInput;
+        initial.contextVault.input = userInput;
+    }
+
+    return initial;
 }

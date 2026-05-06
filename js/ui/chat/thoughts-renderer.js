@@ -2,10 +2,38 @@ import { logger } from '../../logger.js';
 import { stopPipeline } from '../../engine.js';
 import { scrollToBottom } from '../ui-shared.js';
 
+let retryHandlerBound = false;
+
+function bindRetryFromStepHandler() {
+    if (retryHandlerBound) return;
+    retryHandlerBound = true;
+
+    $('#chat').on('click', '.polyceph-rerun-step-button', async function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const step = Number(this.getAttribute('data-step'));
+        const mesId = Number(this.getAttribute('data-mesid'));
+        if (!Number.isInteger(step) || step < 1 || !Number.isInteger(mesId) || mesId < 0) {
+            return;
+        }
+
+        const context = SillyTavern.getContext();
+        if (typeof context.executeSlashCommandsWithOptions === 'function') {
+            await context.executeSlashCommandsWithOptions(`/prerun ${step} ${mesId}`, {
+                handleExecutionErrors: true,
+                handleParserErrors: true,
+            });
+        } else {
+            toastr.warning('Slash command execution is not available in this SillyTavern version.', 'Polyceph');
+        }
+    });
+}
+
 /**
  * Generates HTML for a single reasoning thought block.
  */
-export function generateSingleThoughtHTML(t) {
+export function generateSingleThoughtHTML(t, mesId) {
     let contentHtml = t.content;
     const stContext = SillyTavern.getContext();
     if (typeof stContext.messageFormatting === 'function') {
@@ -16,11 +44,18 @@ export function generateSingleThoughtHTML(t) {
 
     const openClass = t.isSilent ? '' : 'polyceph-item-open';
     const silentClass = t.isSilent ? 'polyceph-silent-thought' : '';
+    const hasStep = Number.isInteger(Number(t.step)) && Number(t.step) > 0;
+    const rightControls = (hasStep || t.profile)
+        ? `<span class="polyceph-item-controls">
+                ${hasStep ? `<button class="polyceph-rerun-step-button" data-step="${Number(t.step)}" data-mesid="${Number(mesId)}" title="Retry from step ${Number(t.step)}"><i class="fa-solid fa-rotate-right"></i></button>` : ''}
+                ${t.profile ? `<span class="polyceph-item-metadata">${t.profile}</span>` : ''}
+            </span>`
+        : '';
 
     return `<div class="polyceph-generated-thought ${openClass} ${silentClass}">
         <div class="polyceph-generated-thought-name" style="cursor:pointer;" onclick="this.parentElement.classList.toggle('polyceph-item-open');">
             <span class="polyceph-item-toggle-icon">▶</span> ${t.title}
-            ${t.profile ? `<span class="polyceph-item-metadata">${t.profile}</span>` : ''}
+            ${rightControls}
         </div>
         <div class="polyceph-generated-thought-content">${contentHtml}</div>
     </div>`;
@@ -29,12 +64,12 @@ export function generateSingleThoughtHTML(t) {
 /**
  * Generates the full HTML container for a list of thoughts.
  */
-export function generateThoughtsHTML(thoughtsArray, pipelineName) {
+export function generateThoughtsHTML(thoughtsArray, pipelineName, mesId) {
     if (!thoughtsArray || thoughtsArray.length === 0) return '';
 
     const thoughtsId = `polyceph_thoughts_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    const htmlBlocks = thoughtsArray.map(t => generateSingleThoughtHTML(t)).join('\n<div class="polyceph-thought-separator"></div>\n');
+    const htmlBlocks = thoughtsArray.map(t => generateSingleThoughtHTML(t, mesId)).join('\n<div class="polyceph-thought-separator"></div>\n');
 
     return `<div id="${thoughtsId}" class="polyceph-thoughts">
         <div class="polyceph-thoughts-details">
@@ -126,6 +161,8 @@ export function renderPolycephThoughts() {
     const context = SillyTavern.getContext();
     if (!context || !context.chat) return;
 
+    bindRetryFromStepHandler();
+
     $('#chat .mes').each((_, messageElement) => {
         const mesId = messageElement.getAttribute('mesid');
         const chatMsg = context.chat[mesId];
@@ -201,7 +238,7 @@ export function renderPolycephThoughts() {
 
         if (!thoughts || thoughts.length === 0) return;
 
-        const thoughtsHtml = generateThoughtsHTML(thoughts, pipelineName);
+        const thoughtsHtml = generateThoughtsHTML(thoughts, pipelineName, mesId);
         const $thoughtsContainer = $(thoughtsHtml);
         const thoughtsId = $thoughtsContainer.attr('id');
 
